@@ -6,8 +6,8 @@ on:
       - '.github/workflows/run.yml'
 
 jobs:
-  bitbank:
-    name: run
+  get_latest_executions:
+    name: get_latest_executions
     runs-on: ubuntu-latest
     env:
       API_KEY: ${{ secrets.API_KEY }}
