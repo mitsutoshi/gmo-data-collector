@@ -1,3 +1,4 @@
+// Get own executions for the most recent day.
 mod gmo;
 
 use chrono::DateTime;
@@ -8,7 +9,7 @@ use gcp_bigquery_client::{
     },
     Client,
 };
-use gmo::{GmoClient, LatestExecutionsResponse};
+use gmo::{Execution, GmoClient, LatestExecutionsResponse};
 use serde::Serialize;
 use std::env;
 use yup_oauth2::ServiceAccountKey;
@@ -62,32 +63,11 @@ async fn main() {
     if let Some(data) = executions.data {
         for e in data.list {
             if e.execution_id > latest_execution_id {
-                // convert date time format
-                let d = DateTime::parse_from_rfc3339(&e.timestamp).unwrap();
-                let timestamp = d.format("%Y-%m-%d %H:%M:%S").to_string();
                 println!(
                     "Found new excution: id={}, timestamp={}",
-                    e.execution_id, timestamp
+                    e.execution_id, e.timestamp
                 );
-
-                // insert
-                ins_req
-                    .add_row(
-                        None,
-                        MyExecutions {
-                            execution_id: e.execution_id,
-                            order_id: e.order_id,
-                            symbol: e.symbol,
-                            side: e.side,
-                            settle_type: e.settle_type,
-                            size: e.size,
-                            price: e.price,
-                            loss_gain: e.loss_gain,
-                            fee: e.fee,
-                            timestamp: timestamp,
-                        },
-                    )
-                    .unwrap()
+                ins_req.add_row(None, convert_my_executions(e)).unwrap()
             }
         }
     }
@@ -108,6 +88,26 @@ async fn main() {
         }
     } else {
         println!("There is no new record.");
+    }
+}
+
+fn convert_my_executions(e: Execution) -> MyExecutions {
+    // convert date time format
+    let d = DateTime::parse_from_rfc3339(&e.timestamp).unwrap();
+    let timestamp = d.format("%Y-%m-%d %H:%M:%S").to_string();
+
+    // return the execution as a MyExecutions
+    MyExecutions {
+        execution_id: e.execution_id,
+        order_id: e.order_id,
+        symbol: e.symbol,
+        side: e.side,
+        settle_type: e.settle_type,
+        size: e.size,
+        price: e.price,
+        loss_gain: e.loss_gain,
+        fee: e.fee,
+        timestamp: timestamp,
     }
 }
 
