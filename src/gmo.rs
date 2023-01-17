@@ -152,7 +152,7 @@ impl GmoClient {
         Ok(res)
     }
 
-    pub async fn get_latesst_executions(
+    pub async fn get_latest_executions(
         &self,
         symbol: String,
         page: Option<i64>,

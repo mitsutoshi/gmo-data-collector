@@ -21,15 +21,6 @@ const TABLE_ID: &str = "my_executions";
 async fn main() {
     dotenv().ok();
 
-    // get execution from GMO
-    let api_key = env::var("API_KEY").unwrap();
-    let api_secret = env::var("API_SECRET").unwrap();
-    let client = GmoClient::new(api_key, api_secret);
-    let executions: LatestExecutionsResponse = client
-        .get_latesst_executions(String::from("BTC"), Option::None, Option::None)
-        .await
-        .unwrap();
-
     // create BigQuery client
     let service_account_key = env::var("SERVICE_ACCOUNT_KEY").unwrap();
     let key: ServiceAccountKey = serde_json::from_str(&service_account_key).unwrap();
@@ -59,28 +50,45 @@ async fn main() {
     }
     println!("Latest execution_id: {:?}", latest_execution_id);
 
+    // get execution from GMO
+    let api_key = env::var("API_KEY").unwrap();
+    let api_secret = env::var("API_SECRET").unwrap();
+    let client = GmoClient::new(api_key, api_secret);
+
+    let executions = &client
+        .get_latest_executions(String::from("BTC"), None, None)
+        .await;
+
     let mut ins_req: TableDataInsertAllRequest = TableDataInsertAllRequest::new();
-    if let Some(data) = executions.data {
-        for e in data.list {
-            if e.execution_id > latest_execution_id {
-                println!(
-                    "Found new excution: id={}, timestamp={}",
-                    e.execution_id, e.timestamp
-                );
-                ins_req.add_row(None, convert_my_executions(e)).unwrap()
+    match executions {
+        Ok(exec) => {
+            if let Some(data) = &exec.data {
+                for e in &data.list {
+                    if e.execution_id > latest_execution_id {
+                        println!(
+                            "Found new excution: id={}, timestamp={}",
+                            e.execution_id, e.timestamp
+                        );
+                        ins_req.add_row(None, convert_my_executions(&e)).unwrap()
+                    }
+                }
             }
+        }
+        Err(e) => {
+            println!("{:?}", e)
         }
     }
 
     // add new executions to table
-    if ins_req.len() > 0 {
+    let rows_num = ins_req.len();
+    if rows_num > 0 {
         let res = bq_client
             .tabledata()
             .insert_all(project_id, DATASET_ID, TABLE_ID, ins_req)
             .await;
         match res {
-            Ok(r) => {
-                println!("Suceeded to register new records => {:?}", r);
+            Ok(_) => {
+                println!("Suceeded to add new {} records.", rows_num);
             }
             Err(e) => {
                 println!("Failed to add new records => {:?}", e);
@@ -91,7 +99,7 @@ async fn main() {
     }
 }
 
-fn convert_my_executions(e: Execution) -> MyExecutions {
+fn convert_my_executions(e: &Execution) -> MyExecutions {
     // convert date time format
     let d = DateTime::parse_from_rfc3339(&e.timestamp).unwrap();
     let timestamp = d.format("%Y-%m-%d %H:%M:%S").to_string();
@@ -100,13 +108,13 @@ fn convert_my_executions(e: Execution) -> MyExecutions {
     MyExecutions {
         execution_id: e.execution_id,
         order_id: e.order_id,
-        symbol: e.symbol,
-        side: e.side,
-        settle_type: e.settle_type,
-        size: e.size,
-        price: e.price,
-        loss_gain: e.loss_gain,
-        fee: e.fee,
+        symbol: e.symbol.clone(),
+        side: e.side.clone(),
+        settle_type: e.settle_type.clone(),
+        size: e.size.clone(),
+        price: e.price.clone(),
+        loss_gain: e.loss_gain.clone(),
+        fee: e.fee.clone(),
         timestamp: timestamp,
     }
 }
