@@ -62,7 +62,7 @@ pub struct ExecutionsResponse {
 
 #[derive(Debug, Deserialize)]
 pub struct ExecutionData {
-    pub list: Vec<Execution>,
+    pub list: Option<Vec<Execution>>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]

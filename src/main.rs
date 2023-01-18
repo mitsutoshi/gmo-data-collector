@@ -50,6 +50,8 @@ async fn main() {
     }
     println!("Latest execution_id: {:?}", latest_execution_id);
 
+    let mut ins_req: TableDataInsertAllRequest = TableDataInsertAllRequest::new();
+
     // get execution from GMO
     let api_key = env::var("API_KEY").unwrap();
     let api_secret = env::var("API_SECRET").unwrap();
@@ -59,17 +61,18 @@ async fn main() {
         .get_latest_executions(String::from("BTC"), None, None)
         .await;
 
-    let mut ins_req: TableDataInsertAllRequest = TableDataInsertAllRequest::new();
     match executions {
         Ok(exec) => {
             if let Some(data) = &exec.data {
-                for e in &data.list {
-                    if e.execution_id > latest_execution_id {
-                        println!(
-                            "Found new excution: id={}, timestamp={}",
-                            e.execution_id, e.timestamp
-                        );
-                        ins_req.add_row(None, convert_my_executions(&e)).unwrap()
+                if let Some(list) = &data.list {
+                    for e in list {
+                        if e.execution_id > latest_execution_id {
+                            println!(
+                                "Found new excution: id={}, timestamp={}",
+                                e.execution_id, e.timestamp
+                            );
+                            ins_req.add_row(None, convert_my_executions(&e)).unwrap()
+                        }
                     }
                 }
             }
@@ -80,15 +83,15 @@ async fn main() {
     }
 
     // add new executions to table
-    let rows_num = ins_req.len();
-    if rows_num > 0 {
+    let row_num = ins_req.len();
+    if row_num > 0 {
         let res = bq_client
             .tabledata()
             .insert_all(project_id, DATASET_ID, TABLE_ID, ins_req)
             .await;
         match res {
             Ok(_) => {
-                println!("Suceeded to add new {} records.", rows_num);
+                println!("Suceeded to add new {} records.", row_num);
             }
             Err(e) => {
                 println!("Failed to add new records => {:?}", e);
