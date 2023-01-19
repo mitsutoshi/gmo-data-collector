@@ -7,6 +7,7 @@ edition = "2021"
 
 [dependencies]
 chrono = "0.4"
+clap = "4.1.1"
 dotenv = "0.15.0"
 gcp-bigquery-client = "0.16.4"
 hex = "0.4"
