@@ -1,6 +1,4 @@
 // Get own executions for the most recent day.
-mod gmo;
-
 use chrono::{DateTime, Utc};
 use clap::Command;
 use dotenv::dotenv;
@@ -10,10 +8,13 @@ use gcp_bigquery_client::{
     },
     Client,
 };
-use gmo::{Execution, GmoClient};
-use serde::Serialize;
 use std::env;
 use yup_oauth2::ServiceAccountKey;
+
+mod gmo;
+mod models;
+use gmo::{Execution, GmoClient};
+use models::{Assets, MyExecutions};
 
 const DATASET_ID: &str = "gmo";
 
@@ -180,26 +181,4 @@ fn convert_my_executions(e: &Execution) -> MyExecutions {
         fee: e.fee.clone(),
         timestamp: timestamp,
     }
-}
-
-#[derive(Serialize, Debug)]
-pub struct MyExecutions {
-    pub execution_id: i64,
-    pub order_id: i64,
-    pub symbol: String,
-    pub side: String,
-    pub settle_type: String,
-    pub size: String,
-    pub price: String,
-    pub loss_gain: String,
-    pub fee: String,
-    pub timestamp: String,
-}
-
-#[derive(Serialize, Debug)]
-pub struct Assets {
-    pub timestamp: String,
-    pub symbol: String,
-    pub amount: f64,
-    pub available: f64,
 }
