@@ -7,10 +7,10 @@ pub struct MyExecutions {
     pub symbol: String,
     pub side: String,
     pub settle_type: String,
-    pub size: String,
-    pub price: String,
-    pub loss_gain: String,
-    pub fee: String,
+    pub size: f64,
+    pub price: f64,
+    pub loss_gain: f64,
+    pub fee: f64,
     pub timestamp: String,
 }
 
