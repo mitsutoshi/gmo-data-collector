@@ -38,11 +38,13 @@ async fn main() {
     let sub_balance = Command::new("assets");
     let sub_get_exec_by_order =
         Command::new("get_executions_by_order").arg(Arg::new("path").required(true));
+    let sub_avg_price = Command::new("average_price");
 
     let app = Command::new("gmo")
         .subcommand(sub_myexec)
         .subcommand(sub_balance)
-        .subcommand(sub_get_exec_by_order);
+        .subcommand(sub_get_exec_by_order)
+        .subcommand(sub_avg_price);
 
     match app.get_matches().subcommand() {
         Some(("my_executions", _)) => {
@@ -54,6 +56,9 @@ async fn main() {
         Some(("get_executions_by_order", args)) => {
             let path = args.get_one::<String>("path").unwrap();
             get_executions_by_order(&client, &bq_client, path.to_string()).await;
+        }
+        Some(("average_price", _)) => {
+            get_avg_price(&client, &bq_client).await;
         }
         _ => {
             println!("None");
@@ -101,23 +106,24 @@ async fn get_my_executions(gmo: &GmoClient, bq_client: &Client) {
                     let mut pos_price = 1044768.46741743;
                     let mut avg_buy_price = 2931351.0;
                     for e in list {
-                        //if e.execution_id > latest_execution_id {
-                        let size = e.size.parse::<f64>().unwrap();
-                        let price = e.price.parse::<f64>().unwrap();
-                        if e.side == "BUY" {
-                            pos += size;
-                            pos_price += size * price;
-                            avg_buy_price = pos_price / pos
-                        } else {
-                            pos -= e.size.parse::<f64>().unwrap();
-                            pos_price -= avg_buy_price * size;
-                        };
+                        if e.execution_id > latest_execution_id {
+                            let size = e.size.parse::<f64>().unwrap();
+                            let price = e.price.parse::<f64>().unwrap();
+                            if e.side == "BUY" {
+                                pos += size;
+                                pos_price += size * price;
+                                avg_buy_price = pos_price / pos
+                            } else {
+                                pos -= e.size.parse::<f64>().unwrap();
+                                pos_price -= avg_buy_price * size;
+                            };
 
-                        println!(
+                            println!(
                             "Found new excution: id={}, timestamp={}, side={}, price={}, size={}, avg_buy_price={}",
                             e.execution_id, e.timestamp, e.side, e.price, e.size, avg_buy_price
                         );
-                        ins_req.add_row(None, convert_my_executions(&e)).unwrap()
+                            ins_req.add_row(None, convert_my_executions(&e)).unwrap()
+                        }
                     }
                 }
             }
@@ -210,6 +216,63 @@ async fn get_executions_by_order(
     }
 
     insert_bq(bq_client, ins_req, "my_executions").await;
+}
+
+async fn get_avg_price(gmo: &GmoClient, bq_client: &Client) {
+    let project_id = &env::var("BQ_PROJECT_ID").unwrap();
+
+    //
+    let query = format!(
+        "select * from (select * from {}.{}.positions order by execution_id desc) limit 1",
+        project_id, DATASET_ID
+    );
+
+    let mut rs = bq_client
+        .job()
+        .query(project_id, QueryRequest::new(query))
+        .await
+        .unwrap();
+
+    let mut latest_pos_exec_id: i64 = 0;
+    let mut cum_size: f64 = 0.0;
+    let mut avg_price: f64 = 0.0;
+
+    if rs.next_row() {
+        latest_pos_exec_id = rs.get_i64_by_name("execution_id").unwrap().unwrap();
+        cum_size = rs.get_f64_by_name("size").unwrap().unwrap();
+        avg_price = rs.get_f64_by_name("average_price").unwrap().unwrap();
+    }
+
+    //
+    let query = format!(
+        "select * from {}.{}.my_executions where execution_id > {} order by timestamp",
+        project_id, DATASET_ID, latest_pos_exec_id
+    );
+
+    let mut rs = bq_client
+        .job()
+        .query(project_id, QueryRequest::new(query))
+        .await
+        .unwrap();
+
+    while rs.next_row() {
+        let ts = rs.get_string_by_name("timestamp").unwrap().unwrap();
+        let exec_id = rs.get_i64_by_name("execution_id").unwrap().unwrap();
+        let size = rs.get_f64_by_name("size").unwrap().unwrap();
+        let side = rs.get_string_by_name("side").unwrap().unwrap();
+
+        if side == "BUY".to_string() {
+            let price = rs.get_f64_by_name("price").unwrap().unwrap();
+            avg_price = (price * size + avg_price * cum_size) / (size + cum_size);
+            cum_size += size;
+        } else {
+            cum_size -= size
+        }
+        println!(
+            "{}, {}({}), {:.8}, {:.0}",
+            ts, exec_id, side, cum_size, avg_price
+        );
+    }
 }
 
 fn convert_my_executions(e: &Execution) -> MyExecutions {

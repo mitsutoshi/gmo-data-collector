@@ -21,3 +21,11 @@ pub struct Assets {
     pub amount: f64,
     pub available: f64,
 }
+
+#[derive(Serialize, Debug)]
+pub struct Positions {
+    pub timestamp: String,
+    pub execution_id: i64,
+    pub average_price: f64,
+    pub total_size: f64,
+}
