@@ -14,7 +14,7 @@ use yup_oauth2::ServiceAccountKey;
 mod gmo;
 mod models;
 use gmo::{Execution, GmoClient};
-use models::{Assets, MyExecutions};
+use models::{Assets, MyExecutions, Positions};
 
 const DATASET_ID: &str = "gmo";
 
@@ -221,12 +221,23 @@ async fn get_executions_by_order(
 async fn get_avg_price(gmo: &GmoClient, bq_client: &Client) {
     let project_id = &env::var("BQ_PROJECT_ID").unwrap();
 
-    //
+    // get the average price saved last time
     let query = format!(
-        "select * from (select * from {}.{}.positions order by execution_id desc) limit 1",
+        "
+        select
+          execution_id,
+          size,
+          average_price
+        from
+        (
+          select *
+          from {}.{}.positions
+          order by
+            execution_id desc
+        )
+        limit 1",
         project_id, DATASET_ID
     );
-
     let mut rs = bq_client
         .job()
         .query(project_id, QueryRequest::new(query))
@@ -242,18 +253,20 @@ async fn get_avg_price(gmo: &GmoClient, bq_client: &Client) {
         cum_size = rs.get_f64_by_name("size").unwrap().unwrap();
         avg_price = rs.get_f64_by_name("average_price").unwrap().unwrap();
     }
+    println!("latest execution_id in positions: {}", latest_pos_exec_id);
 
-    //
+    // get executions records which the average price has not yet been calculated.
     let query = format!(
         "select * from {}.{}.my_executions where execution_id > {} order by timestamp",
         project_id, DATASET_ID, latest_pos_exec_id
     );
-
     let mut rs = bq_client
         .job()
         .query(project_id, QueryRequest::new(query))
         .await
         .unwrap();
+
+    let mut ins_req: TableDataInsertAllRequest = TableDataInsertAllRequest::new();
 
     while rs.next_row() {
         let ts = rs.get_string_by_name("timestamp").unwrap().unwrap();
@@ -268,11 +281,22 @@ async fn get_avg_price(gmo: &GmoClient, bq_client: &Client) {
         } else {
             cum_size -= size
         }
-        println!(
-            "{}, {}({}), {:.8}, {:.0}",
-            ts, exec_id, side, cum_size, avg_price
-        );
+
+        let s = format!("{:.8}", cum_size).parse::<f64>().unwrap();
+        println!("{}, {}({}), {:.8}, {:.0}", ts, exec_id, side, s, avg_price);
+        ins_req
+            .add_row(
+                None,
+                Positions {
+                    timestamp: ts,
+                    execution_id: exec_id,
+                    average_price: avg_price,
+                    size: s,
+                },
+            )
+            .unwrap()
     }
+    insert_bq(bq_client, ins_req, "positions").await;
 }
 
 fn convert_my_executions(e: &Execution) -> MyExecutions {

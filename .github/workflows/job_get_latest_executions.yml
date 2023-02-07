@@ -31,3 +31,7 @@ jobs:
         with:
           command: run
           args: my_executions
+      - uses: actions-rs/cargo@v1
+        with:
+          command: run
+          args: average_price

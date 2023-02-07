@@ -27,5 +27,5 @@ pub struct Positions {
     pub timestamp: String,
     pub execution_id: i64,
     pub average_price: f64,
-    pub total_size: f64,
+    pub size: f64,
 }
