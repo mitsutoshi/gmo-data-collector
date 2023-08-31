@@ -1,18 +1,18 @@
-use dotenv::dotenv;
 use gcp_bigquery_client::{
-    model::{
-        query_request::QueryRequest, table_data_insert_all_request::TableDataInsertAllRequest,
-    },
-    Client,
+    model::table_data_insert_all_request::TableDataInsertAllRequest, Client,
 };
 use std::env;
 
-pub async fn insert_bq(ins_req: TableDataInsertAllRequest, dataset_id: &str, table_id: &str) {
-    dotenv().ok();
-    // create BigQuery client
+// create BigQuery client
+pub async fn create_bq_client() -> Client {
     let key_str = env::var("SERVICE_ACCOUNT_KEY").unwrap();
     let key = serde_json::from_str(&key_str).unwrap();
-    let bq_client: Client = Client::from_service_account_key(key, false).await.unwrap();
+    Client::from_service_account_key(key, false).await.unwrap()
+}
+
+pub async fn insert_bq(ins_req: TableDataInsertAllRequest, dataset_id: &str, table_id: &str) {
+    // create BigQuery client
+    let bq_client = create_bq_client().await;
 
     // add new executions to table
     let row_num = ins_req.len();

@@ -1,14 +1,11 @@
 use crate::{
-    bq::insert_bq,
+    bq::{create_bq_client, insert_bq},
     gmo::{Execution, GmoClient},
     models::{Assets, MyExecutions, Positions},
 };
 use chrono::{DateTime, Utc};
-use gcp_bigquery_client::{
-    model::{
-        query_request::QueryRequest, table_data_insert_all_request::TableDataInsertAllRequest,
-    },
-    Client,
+use gcp_bigquery_client::model::{
+    query_request::QueryRequest, table_data_insert_all_request::TableDataInsertAllRequest,
 };
 use std::env;
 
@@ -50,7 +47,7 @@ pub async fn get_assets() {
 }
 
 // Get latest executions within 24 hours and save them into BigQuery.
-pub async fn get_my_executions(bq_client: &Client) {
+pub async fn get_my_executions() {
     // select latest execution_id from BigQuery
     let project_id = &env::var("BQ_PROJECT_ID").unwrap();
     let table_id = "my_executions";
@@ -60,6 +57,7 @@ pub async fn get_my_executions(bq_client: &Client) {
     );
 
     // Search latest execution from BigQuery
+    let bq_client = create_bq_client().await;
     let mut rs = bq_client
         .job()
         .query(project_id, QueryRequest::new(query))
@@ -181,4 +179,86 @@ fn convert_my_executions(e: &Execution) -> MyExecutions {
         fee: e.fee.parse::<f64>().unwrap(),
         timestamp: timestamp,
     }
+}
+
+pub async fn get_avg_price() {
+    // get the average price saved last time
+    let project_id = &env::var("BQ_PROJECT_ID").unwrap();
+    let query = format!(
+        "
+        select
+          execution_id,
+          size,
+          average_price
+        from
+        (
+          select *
+          from {}.{}.positions
+          order by
+            execution_id desc
+        )
+        limit 1",
+        project_id, DATASET_ID
+    );
+
+    let bq_client = create_bq_client().await;
+    let mut rs = bq_client
+        .job()
+        .query(project_id, QueryRequest::new(query))
+        .await
+        .unwrap();
+
+    let mut latest_pos_exec_id: i64 = 0;
+    let mut cum_size: f64 = 0.0;
+    let mut avg_price: f64 = 0.0;
+
+    if rs.next_row() {
+        latest_pos_exec_id = rs.get_i64_by_name("execution_id").unwrap().unwrap();
+        cum_size = rs.get_f64_by_name("size").unwrap().unwrap();
+        avg_price = rs.get_f64_by_name("average_price").unwrap().unwrap();
+    }
+    println!("latest execution_id in positions: {}", latest_pos_exec_id);
+
+    // get executions records which the average price has not yet been calculated.
+    let query = format!(
+        "select * from {}.{}.my_executions where execution_id > {} order by timestamp",
+        project_id, DATASET_ID, latest_pos_exec_id
+    );
+    let mut rs = bq_client
+        .job()
+        .query(project_id, QueryRequest::new(query))
+        .await
+        .unwrap();
+
+    let mut ins_req: TableDataInsertAllRequest = TableDataInsertAllRequest::new();
+
+    while rs.next_row() {
+        let ts = rs.get_string_by_name("timestamp").unwrap().unwrap();
+        let exec_id = rs.get_i64_by_name("execution_id").unwrap().unwrap();
+        let size = rs.get_f64_by_name("size").unwrap().unwrap();
+        let side = rs.get_string_by_name("side").unwrap().unwrap();
+
+        if side == "BUY".to_string() {
+            let price = rs.get_f64_by_name("price").unwrap().unwrap();
+            avg_price = (price * size + avg_price * cum_size) / (size + cum_size);
+            cum_size += size;
+        } else {
+            cum_size -= size
+        }
+
+        let s = format!("{:.8}", cum_size).parse::<f64>().unwrap();
+        println!("{}, {}({}), {:.8}, {:.0}", ts, exec_id, side, s, avg_price);
+        ins_req
+            .add_row(
+                None,
+                Positions {
+                    timestamp: ts,
+                    execution_id: exec_id,
+                    average_price: avg_price,
+                    size: s,
+                },
+            )
+            .unwrap()
+    }
+    insert_bq(ins_req, DATASET_ID, "positions").await;
 }
