@@ -1,7 +1,7 @@
 use crate::{
     bq::{create_bq_client, insert_bq},
     gmo::{Execution, GmoClient},
-    models::{Assets, MyExecutions, Positions},
+    models::{Assets, MyExecutions, Positions, Ticker},
 };
 use chrono::{DateTime, Utc};
 use gcp_bigquery_client::model::{
@@ -261,4 +261,36 @@ pub async fn get_avg_price() {
             .unwrap()
     }
     insert_bq(ins_req, DATASET_ID, "positions").await;
+}
+
+pub async fn get_ticker() {
+    // create GMO API client
+    let gmo = GmoClient::new(
+        env::var("API_KEY").unwrap(),
+        env::var("API_SECRET").unwrap(),
+    );
+
+    // get latest executions by GMO api (within 24 hours)
+    let ticker = &gmo.get_ticker(Some(String::from("BTC"))).await;
+    match ticker {
+        Ok(t) => {
+            println!(">> {:?}", t.data);
+            let btc = &t.data[0];
+            let mut ins_req: TableDataInsertAllRequest = TableDataInsertAllRequest::new();
+            ins_req
+                .add_row(
+                    None,
+                    Ticker {
+                        timestamp: Utc::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+                        symbol: btc.symbol.clone(),
+                        last: btc.last.parse::<f64>().unwrap(),
+                    },
+                )
+                .unwrap();
+            insert_bq(ins_req, DATASET_ID, "ticker").await;
+        }
+        Err(e) => {
+            println!("err>{}", e);
+        }
+    }
 }

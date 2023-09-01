@@ -31,4 +31,8 @@ jobs:
         with:
           command: run
           args: assets
+      - uses: actions-rs/cargo@v1
+        with:
+          command: run
+          args: ticker
 

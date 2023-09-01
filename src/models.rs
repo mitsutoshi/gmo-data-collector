@@ -29,3 +29,10 @@ pub struct Positions {
     pub average_price: f64,
     pub size: f64,
 }
+
+#[derive(Serialize, Debug)]
+pub struct Ticker {
+    pub timestamp: String,
+    pub symbol: String,
+    pub last: f64,
+}

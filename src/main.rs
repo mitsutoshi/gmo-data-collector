@@ -14,7 +14,8 @@ async fn main() {
         .subcommand(Command::new("my_executions"))
         .subcommand(Command::new("assets"))
         .subcommand(Command::new("get_executions_by_order").arg(Arg::new("path").required(true)))
-        .subcommand(Command::new("average_price"));
+        .subcommand(Command::new("average_price"))
+        .subcommand(Command::new("ticker"));
 
     match app.get_matches().subcommand() {
         // Get latest executions and save them to the BigQuery.
@@ -34,6 +35,9 @@ async fn main() {
         // Calculate average buy price of own position.
         Some(("average_price", _)) => {
             subcommands::get_avg_price().await;
+        }
+        Some(("ticker", _)) => {
+            subcommands::get_ticker().await;
         }
         _ => {
             println!("None");

@@ -10,6 +10,7 @@ use {
     serde_json::Value,
 };
 
+const PUBLIC_API_URL: &str = "https://api.coin.z.com/public";
 const PRIVATE_API_URL: &str = "https://api.coin.z.com/private";
 
 #[derive(Debug)]
@@ -99,6 +100,25 @@ pub struct Pagination {
     pub count: i64,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct TickerResponse {
+    pub status: u8,
+    pub data: Vec<TickerData>,
+    pub responsetime: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TickerData {
+    pub ask: String,
+    pub bid: String,
+    pub high: String,
+    pub low: String,
+    pub last: String,
+    pub symbol: String,
+    pub timestamp: String,
+    pub volume: String,
+}
+
 impl GmoClient {
     pub fn new(api_key: String, api_secret: String) -> Self {
         GmoClient {
@@ -106,6 +126,28 @@ impl GmoClient {
             api_secret: api_secret,
             client: Client::builder().build().unwrap(),
         }
+    }
+
+    #[allow(dead_code)]
+    pub async fn get_ticker(
+        &self,
+        symbol: Option<String>,
+    ) -> Result<TickerResponse, reqwest::Error> {
+        let path = "/v1/ticker";
+        let mut query = vec![];
+        if let Some(v) = symbol {
+            query.push(("symbol", v));
+        }
+        let res = self
+            .client
+            .get(format!("{}{}", PUBLIC_API_URL, path))
+            .query(&query)
+            .send()
+            .await?
+            .json::<TickerResponse>()
+            .await
+            .unwrap();
+        Ok(res)
     }
 
     // private api: /v1/account/assets
