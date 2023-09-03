@@ -11,6 +11,16 @@ use std::env;
 
 const DATASET_ID: &str = "gmo";
 
+pub async fn status() {
+    // create GMO API client
+    let gmo = GmoClient::new(
+        env::var("API_KEY").unwrap(),
+        env::var("API_SECRET").unwrap(),
+    );
+    let status = gmo.status().await.unwrap();
+    println!("Status: {:?}", status);
+}
+
 pub async fn get_assets() {
     // create GMO API client
     let gmo = GmoClient::new(
@@ -113,9 +123,9 @@ pub async fn get_my_executions() {
 
                             println!(
                             "Found new excution: id={}, timestamp={}, side={}, price={}, size={}, avg_buy_price={}",
-                            e.execution_id, e.timestamp, e.side, e.price, e.size, avg_buy_price
-                        );
-                            //ins_req.add_row(None, convert_my_executions(&e)).unwrap()
+                            e.execution_id, e.timestamp, e.side, e.price, e.size, avg_buy_price);
+
+                            ins_req.add_row(None, convert_my_executions(&e)).unwrap();
                         }
                     }
                 }
@@ -136,12 +146,20 @@ pub async fn get_executions_by_order(order_id_csv_file_path: String) {
         env::var("API_SECRET").unwrap(),
     );
 
+    let mut order_ids: Vec<String> = vec![];
+
     let mut ins_req: TableDataInsertAllRequest = TableDataInsertAllRequest::new();
     let mut reader = csv::Reader::from_path(order_id_csv_file_path).unwrap();
     for rec in reader.records() {
         if let Ok(r) = rec {
             let order_id = r.get(0).unwrap().to_string();
             println!("order_id: {:?}", order_id);
+
+            if order_ids.contains(&order_id) {
+                println!("  already processed: {:?}", order_id);
+                continue;
+            }
+            order_ids.push(order_id.clone());
 
             //  get execution by order_id from GMO
             let executions = gmo.get_executions(Some(order_id), None).await.unwrap();

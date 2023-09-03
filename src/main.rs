@@ -6,6 +6,8 @@ mod subcommands;
 use clap::{Arg, Command};
 use dotenv::dotenv;
 
+const COMMAND_STATUS: &str = "status";
+
 #[tokio::main]
 async fn main() {
     dotenv().ok();
@@ -15,7 +17,8 @@ async fn main() {
         .subcommand(Command::new("assets"))
         .subcommand(Command::new("get_executions_by_order").arg(Arg::new("path").required(true)))
         .subcommand(Command::new("average_price"))
-        .subcommand(Command::new("ticker"));
+        .subcommand(Command::new("ticker"))
+        .subcommand(Command::new(COMMAND_STATUS));
 
     match app.get_matches().subcommand() {
         // Get latest executions and save them to the BigQuery.
@@ -38,6 +41,9 @@ async fn main() {
         }
         Some(("ticker", _)) => {
             subcommands::get_ticker().await;
+        }
+        Some((COMMAND_STATUS, _)) => {
+            subcommands::status().await;
         }
         _ => {
             println!("None");

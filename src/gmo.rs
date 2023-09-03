@@ -21,6 +21,25 @@ pub struct GmoClient {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct StatusResponse {
+    pub status: u8,
+    pub data: Option<StatusData>,
+    pub responsetime: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct StatusData {
+    pub status: Status,
+}
+
+#[derive(Debug, Deserialize)]
+pub enum Status {
+    MAINTENANCE,
+    REOPEN,
+    OPEN,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct GmoResponse {
     pub status: u8,
     pub responsetime: String,
@@ -87,7 +106,7 @@ pub struct Execution {
 #[derive(Debug, Deserialize)]
 pub struct LatestExecutionsResponse {
     pub status: u8,
-    pub responsetime: String,
+    pub responsetime: Option<String>,
     pub pagination: Option<Pagination>,
     pub data: Option<ExecutionData>,
     pub messages: Option<ErrorMessages>,
@@ -126,6 +145,20 @@ impl GmoClient {
             api_secret: api_secret,
             client: Client::builder().build().unwrap(),
         }
+    }
+
+    #[allow(dead_code)]
+    pub async fn status(&self) -> Result<StatusResponse, reqwest::Error> {
+        let path = "/v1/status";
+        let res = self
+            .client
+            .get(format!("{}{}", PUBLIC_API_URL, path))
+            .send()
+            .await?
+            .json::<StatusResponse>()
+            .await
+            .unwrap();
+        Ok(res)
     }
 
     #[allow(dead_code)]
@@ -217,10 +250,9 @@ impl GmoClient {
             .query(&query)
             .headers(self.create_auth_headers("GET", path, Some("")))
             .send()
-            .await?
-            .json::<LatestExecutionsResponse>()
-            .await
-            .unwrap();
+            .await?;
+        println!("Response: {:?}", res);
+        let res = res.json::<LatestExecutionsResponse>().await.unwrap();
         Ok(res)
     }
 
