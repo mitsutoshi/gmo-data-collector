@@ -136,7 +136,7 @@ pub async fn get_my_executions() {
         }
     }
 
-    //insert_bq(ins_req, DATASET_ID, table_id).await;
+    insert_bq(ins_req, DATASET_ID, table_id).await;
 }
 
 pub async fn get_executions_by_order(order_id_csv_file_path: String) {
